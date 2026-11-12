@@ -152,8 +152,7 @@ class TelephonyManager:
         if api_key:
             try:
                 import telnyx
-                telnyx.api_key = api_key
-                self.telnyx_client = telnyx
+                self.telnyx_client = telnyx.Telnyx(api_key=api_key)
                 logger.info("Telnyx client initialized")
             except ImportError:
                 logger.warning("Telnyx SDK not installed. Run: pip install telnyx")
@@ -252,27 +251,27 @@ class TelephonyManager:
     ) -> List[Dict[str, Any]]:
         """Search available numbers via Telnyx"""
         try:
-            search_params = {
-                'filter[country_code]': country,
-                'filter[limit]': limit,
+            search_filter = {
+                'country_code': country,
+                'limit': limit,
             }
 
             if area_code:
-                search_params['filter[national_destination_code]'] = area_code
+                search_filter['national_destination_code'] = area_code
             if contains:
-                search_params['filter[phone_number][contains]'] = contains
+                search_filter['phone_number'] = {'contains': contains}
 
             loop = asyncio.get_event_loop()
             response = await loop.run_in_executor(
                 None,
-                lambda: self.telnyx_client.AvailablePhoneNumber.list(**search_params)
+                lambda: self.telnyx_client.available_phone_numbers.list(filter=search_filter)
             )
 
             return [{
                 'phone_number': n.phone_number,
                 'friendly_name': n.phone_number,
                 'locality': getattr(n, 'locality', ''),
-                'region': getattr(n, 'region_information', [{}])[0].get('region_name', ''),
+                'region': n.to_dict().get('region_information', [{}])[0].get('region_name', ''),
                 'country': country,
                 'capabilities': {
                     'voice': True,
@@ -370,7 +369,7 @@ class TelephonyManager:
             loop = asyncio.get_event_loop()
             order = await loop.run_in_executor(
                 None,
-                lambda: self.telnyx_client.NumberOrder.create(
+                lambda: self.telnyx_client.number_orders.create(
                     phone_numbers=[{'phone_number': phone_number}]
                 )
             )
@@ -383,7 +382,7 @@ class TelephonyManager:
                 country=phone_number[:2],
                 capabilities=['voice', 'sms'],
                 provider=TelephonyProvider.TELNYX,
-                provider_sid=order.id,
+                provider_sid=order.data.id,
                 friendly_name=friendly_name,
             )
 
@@ -392,7 +391,7 @@ class TelephonyManager:
             return {
                 'success': True,
                 'number': number,
-                'provider_sid': order.id
+                'provider_sid': order.data.id
             }
 
         except Exception as e:
@@ -415,7 +414,7 @@ class TelephonyManager:
                 loop = asyncio.get_event_loop()
                 await loop.run_in_executor(
                     None,
-                    lambda: self.telnyx_client.PhoneNumber.delete(provider_sid)
+                    lambda: self.telnyx_client.phone_numbers.delete(provider_sid)
                 )
 
             logger.info(f"Released phone number: {phone_number}")
@@ -534,7 +533,7 @@ class TelephonyManager:
                 loop = asyncio.get_event_loop()
                 telnyx_call = await loop.run_in_executor(
                     None,
-                    lambda: self.telnyx_client.Call.create(
+                    lambda: self.telnyx_client.calls.dial(
                         connection_id=os.getenv('TELNYX_CONNECTION_ID'),
                         to=to_number,
                         from_=from_number,
@@ -552,13 +551,13 @@ class TelephonyManager:
                     from_number=from_number,
                     to_number=to_number,
                     status=CallStatus.INITIATED,
-                    provider_call_id=telnyx_call.call_control_id,
+                    provider_call_id=telnyx_call.data.call_control_id,
                 )
 
                 return {
                     'success': True,
                     'call': call,
-                    'provider_call_id': telnyx_call.call_control_id
+                    'provider_call_id': telnyx_call.data.call_control_id
                 }
 
         except Exception as e:
@@ -654,7 +653,7 @@ class TelephonyManager:
                 loop = asyncio.get_event_loop()
                 await loop.run_in_executor(
                     None,
-                    lambda: self.telnyx_client.Call.hangup(provider_call_id)
+                    lambda: self.telnyx_client.calls.actions.hangup(provider_call_id)
                 )
 
             logger.info(f"Ended call: {provider_call_id}")
@@ -688,7 +687,7 @@ class TelephonyManager:
                 loop = asyncio.get_event_loop()
                 await loop.run_in_executor(
                     None,
-                    lambda: self.telnyx_client.Call.send_dtmf(
+                    lambda: self.telnyx_client.calls.actions.send_dtmf(
                         provider_call_id,
                         digits=digits
                     )

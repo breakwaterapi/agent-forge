@@ -40,7 +40,7 @@ livekit-agents>=0.8.0
 
 # Telephony
 twilio>=9.0.0
-# telnyx>=2.0.0  # Alternative telephony provider
+# telnyx==4.191.0  # Alternative telephony provider
 
 # LLM Providers for voice agents
 openai>=1.30.0

@@ -158,8 +158,7 @@ class SMSManager:
         if api_key:
             try:
                 import telnyx
-                telnyx.api_key = api_key
-                self.telnyx_client = telnyx
+                self.telnyx_client = telnyx.Telnyx(api_key=api_key)
                 logger.info("Telnyx client initialized for SMS")
             except ImportError:
                 logger.warning("Telnyx SDK not installed. Run: pip install telnyx")
@@ -238,7 +237,7 @@ class SMSManager:
                 provider_message = await self._send_telnyx_sms(
                     from_number, to_number, body, media_urls
                 )
-                message.provider_sid = provider_message.id
+                message.provider_sid = provider_message.data.id
                 message.status = SMSStatus.SENT
                 message.sent_at = datetime.now()
 
@@ -314,7 +313,7 @@ class SMSManager:
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(
             None,
-            lambda: self.telnyx_client.Message.create(**message_params)
+            lambda: self.telnyx_client.messages.send(**message_params)
         )
 
     async def send_bulk_sms(
